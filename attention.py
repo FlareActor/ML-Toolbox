@@ -71,28 +71,32 @@ class PositionEmbedding(Layer):
         return mask
     
 class MultiHeadAttention(Layer):
-    def __init__(self, nb_header=8, dk=64, **kwargs):
+    """Multi-head dot product attention"""
+    def __init__(self, nb_header=8, output_dim=128, dk=None, **kwargs):
         super(MultiHeadAttention, self).__init__(**kwargs)
         self.nb_header = nb_header
-        self.dk=dk
+        self.output_dim=output_dim
+        self.dk=output_dim//nb_header if dk is None else dk
 
     def build(self, input_shape):
+        dim=self.nb_header*self.dk
         self.kernel_q = self.add_weight(name='weight_Q', 
-                                        shape=(input_shape[0][-1], self.dk, self.nb_header),
-                                        initializer='uniform',
+                                        shape=(input_shape[0][-1], dim),
+                                        initializer='glorot_uniform',
                                         trainable=True)
         self.kernel_k = self.add_weight(name='weight_K', 
-                                        shape=(input_shape[1][-1], self.dk, self.nb_header),
-                                        initializer='uniform',
+                                        shape=(input_shape[1][-1], dim),
+                                        initializer='glorot_uniform',
                                         trainable=True)
         self.kernel_v = self.add_weight(name='weight_V', 
-                                        shape=(input_shape[2][-1], self.dk, self.nb_header),
-                                        initializer='uniform',
+                                        shape=(input_shape[2][-1], dim),
+                                        initializer='glorot_uniform',
                                         trainable=True)
-        self.kernel_o = self.add_weight(name='weight_O', 
-                                        shape=(self.dk*self.nb_header, input_shape[0][-1]),
-                                        initializer='uniform',
-                                        trainable=True)
+        if self.output_dim!=dim:
+            self.kernel_o = self.add_weight(name='weight_O', 
+                                            shape=(dim, self.output_dim),
+                                            initializer='glorot_uniform',
+                                            trainable=True)
         super(MultiHeadAttention, self).build(input_shape)
 
     def call(self, x, mask=None):
@@ -100,10 +104,13 @@ class MultiHeadAttention(Layer):
         qw=K.dot(q,self.kernel_q)
         kw=K.dot(k,self.kernel_k)
         vw=K.dot(v,self.kernel_v)
+        qw=K.reshape(qw,(-1,qw.shape[1],self.dk,self.nb_header))
+        kw=K.reshape(kw,(-1,kw.shape[1],self.dk,self.nb_header))
+        vw=K.reshape(vw,(-1,vw.shape[1],self.dk,self.nb_header))
         qw=tf.transpose(qw,[0,3,1,2])
         kw=tf.transpose(kw,[0,3,2,1])
         vw=tf.transpose(vw,[0,3,1,2])
-        dot=K.batch_dot(qw,kw)
+        dot=K.batch_dot(qw,kw)*(self.dk**-0.5)
         if mask is not None:
             m=K.cast(mask[1],tf.float32)
             m=(1-m)*1e12
@@ -114,11 +121,12 @@ class MultiHeadAttention(Layer):
         o=K.batch_dot(p,vw)
         o=tf.transpose(o,[0,2,3,1])
         o=K.reshape(o,(-1,o.shape[1],o.shape[2]*o.shape[3]))
-        o=K.dot(o,self.kernel_o)
+        if getattr(self,'kernel_o',None) is not None:
+            o=K.dot(o,self.kernel_o)
         return o
 
     def compute_output_shape(self, input_shape):
-        return input_shape[0]
+        return (input_shape[0][0],input_shape[0][1],self.output_dim)
     
     def compute_mask(self, inputs, mask=None):
         return mask[0]
