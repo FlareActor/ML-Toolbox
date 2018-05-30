@@ -6,6 +6,10 @@ from keras.engine.topology import Layer
 from keras import backend as K
 
 class Attention(Layer):
+    def __init__(self,dropout=0,**kwargs):
+        super(Attention,self).__init__(**kwargs)
+        self.dropout=dropout
+    
     def call(self,x,mask=None):
         q,k,v=x
         dot=K.batch_dot(q,tf.transpose(k,[0,2,1]))
@@ -17,6 +21,7 @@ class Attention(Layer):
             m=K.expand_dims(m,1)
             dot=dot-m
         p=K.softmax(dot)
+        p=K.dropout(p,level=self.dropout)
         return K.batch_dot(p,v)
     
     def compute_output_shape(self, input_shape):
@@ -24,14 +29,14 @@ class Attention(Layer):
     
     def compute_mask(self, inputs, mask=None):
         return mask[0]
-    
+
 class PositionEmbedding(Layer):
     def __init__(self,dim=64,mode='sum',**kwargs):
         super(PositionEmbedding,self).__init__(**kwargs)
         assert mode in ['sum','concat']
         self.dim=dim
         self.mode=mode
-        
+    
     def call(self,x,mask=None):
         if self.mode=='sum':
             self.dim=int(x.shape[-1])
@@ -69,36 +74,37 @@ class PositionEmbedding(Layer):
     
     def compute_mask(self,inputs,mask=None):
         return mask
-    
+
 class MultiHeadAttention(Layer):
     """Multi-head dot product attention"""
-    def __init__(self, nb_header=8, output_dim=128, dk=None, **kwargs):
+    def __init__(self, nb_header=8, output_dim=128, dk=None, dropout=0, **kwargs):
         super(MultiHeadAttention, self).__init__(**kwargs)
         self.nb_header = nb_header
         self.output_dim=output_dim
         self.dk=output_dim//nb_header if dk is None else dk
-
+        self.dropout=dropout
+    
     def build(self, input_shape):
         dim=self.nb_header*self.dk
-        self.kernel_q = self.add_weight(name='weight_Q', 
+        self.kernel_q = self.add_weight(name='weight_Q',
                                         shape=(input_shape[0][-1], dim),
                                         initializer='glorot_uniform',
                                         trainable=True)
-        self.kernel_k = self.add_weight(name='weight_K', 
-                                        shape=(input_shape[1][-1], dim),
-                                        initializer='glorot_uniform',
-                                        trainable=True)
-        self.kernel_v = self.add_weight(name='weight_V', 
-                                        shape=(input_shape[2][-1], dim),
-                                        initializer='glorot_uniform',
-                                        trainable=True)
-        if self.output_dim!=dim:
-            self.kernel_o = self.add_weight(name='weight_O', 
-                                            shape=(dim, self.output_dim),
-                                            initializer='glorot_uniform',
-                                            trainable=True)
-        super(MultiHeadAttention, self).build(input_shape)
-
+                                        self.kernel_k = self.add_weight(name='weight_K',
+                                                                        shape=(input_shape[1][-1], dim),
+                                                                        initializer='glorot_uniform',
+                                                                        trainable=True)
+                                        self.kernel_v = self.add_weight(name='weight_V',
+                                                                        shape=(input_shape[2][-1], dim),
+                                                                        initializer='glorot_uniform',
+                                                                        trainable=True)
+                                        if self.output_dim!=dim:
+                                            self.kernel_o = self.add_weight(name='weight_O',
+                                                                            shape=(dim, self.output_dim),
+                                                                            initializer='glorot_uniform',
+                                                                            trainable=True)
+                                        super(MultiHeadAttention, self).build(input_shape)
+    
     def call(self, x, mask=None):
         q,k,v=x
         qw=K.dot(q,self.kernel_q)
@@ -118,13 +124,14 @@ class MultiHeadAttention(Layer):
             m=K.expand_dims(m,1)
             dot=dot-m
         p=K.softmax(dot)
+        p=K.dropout(p,level=self.dropout)
         o=K.batch_dot(p,vw)
         o=tf.transpose(o,[0,2,3,1])
         o=K.reshape(o,(-1,o.shape[1],o.shape[2]*o.shape[3]))
         if getattr(self,'kernel_o',None) is not None:
             o=K.dot(o,self.kernel_o)
         return o
-
+    
     def compute_output_shape(self, input_shape):
         return (input_shape[0][0],input_shape[0][1],self.output_dim)
     
