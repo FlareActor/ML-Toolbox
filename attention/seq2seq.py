@@ -208,7 +208,8 @@ if __name__ == '__main__':
     n_true = tf.reduce_sum(n_true)
 
     '''load data'''
-    load_data = lambda path: pd.read_csv(path, header=None).values
+    def load_data(path):
+        return pd.read_csv(path, header=None).values
     X_train = load_data('./dataset/task8_train_input.csv')
     y_train = load_data('./dataset/task8_train_output.csv')
     X_test = load_data('./dataset/task8_test_input.csv')

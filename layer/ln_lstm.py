@@ -62,7 +62,7 @@ class LNLSTMCell(LSTMCell):
                 training=training,
                 count=4)
         if (0 < self.recurrent_dropout < 1 and
-                    self._recurrent_dropout_mask is None):
+                self._recurrent_dropout_mask is None):
             self._recurrent_dropout_mask = _generate_dropout_mask(
                 K.ones_like(states[0]),
                 self.recurrent_dropout,

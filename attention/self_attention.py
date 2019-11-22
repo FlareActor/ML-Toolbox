@@ -94,20 +94,20 @@ class MultiHeadAttention(Layer):
                                         shape=(input_shape[0][-1], dim),
                                         initializer='glorot_uniform',
                                         trainable=True)
-            self.kernel_k = self.add_weight(name='weight_K',
-                                            shape=(input_shape[1][-1], dim),
+        self.kernel_k = self.add_weight(name='weight_K',
+                                        shape=(input_shape[1][-1], dim),
+                                        initializer='glorot_uniform',
+                                        trainable=True)
+        self.kernel_v = self.add_weight(name='weight_V',
+                                        shape=(input_shape[2][-1], dim),
+                                        initializer='glorot_uniform',
+                                        trainable=True)
+        if self.output_dim != dim:
+            self.kernel_o = self.add_weight(name='weight_O',
+                                            shape=(dim, self.output_dim),
                                             initializer='glorot_uniform',
                                             trainable=True)
-            self.kernel_v = self.add_weight(name='weight_V',
-                                            shape=(input_shape[2][-1], dim),
-                                            initializer='glorot_uniform',
-                                            trainable=True)
-            if self.output_dim != dim:
-                self.kernel_o = self.add_weight(name='weight_O',
-                                                shape=(dim, self.output_dim),
-                                                initializer='glorot_uniform',
-                                                trainable=True)
-            super(MultiHeadAttention, self).build(input_shape)
+        super(MultiHeadAttention, self).build(input_shape)
 
     def call(self, x, mask=None):
         q, k, v = x
